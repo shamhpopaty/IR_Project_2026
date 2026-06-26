@@ -1,0 +1,53 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Results / outputs
+results/
+result/
+outputs/
+output/
+runs/
+logs/
+checkpoints/
+
+# Data / models / large files
+data/
+datasets/
+models/
+weights/
+
+*.pkl
+*.joblib
+*.model
+*.h5
+*.pt
+*.pth
+*.onnx
+*.npy
+*.npz
+
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+
+# System files
+.DS_Store
+Thumbs.db
+__MACOSX/
+
+# IDE
+.vscode/
+.idea/
