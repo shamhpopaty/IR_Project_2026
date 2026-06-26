@@ -77,55 +77,87 @@ def run_search(services, query, selected_models, top_k=10):
             st.error(f"Error running {MODEL_LABELS.get(model_name, model_name)}: {exc}")
     return results
 
-
 def main():
     st.title("Information Retrieval Search UI")
     st.write("Enter a query, choose one or more models, and click Search to view retrieved documents.")
 
     query = st.text_input("Search query", value="")
+
     selected_model = st.selectbox(
         "Choose model",
         options=MODEL_ORDER,
         format_func=lambda key: MODEL_LABELS.get(key, key),
         index=0,
     )
-    top_k = st.number_input("Top k results", min_value=1, max_value=50, value=10, step=1)
+
+    top_k = st.number_input(
+        "Top k results",
+        min_value=1,
+        max_value=50,
+        value=10,
+        step=1
+    )
+
+    enable_clustering = st.checkbox("Enable Document Clustering")
+
+    n_clusters = st.selectbox(
+        "Number of clusters",
+        ["auto", 2, 3, 4, 5, 6],
+        index=0
+    )
 
     if st.button("Load saved evaluation results"):
         services = load_services()
+
         evaluator = Evaluator(
             tfidf=services["tfidf"],
             word2vec=services["word2vec"],
             bm25=services["bm25"],
             query_refiner=query_refiner,
         )
+
         results = evaluator.load_results_from_file()
+
         if results is None:
             st.warning("No saved evaluation results were found.")
         else:
             st.success("Loaded evaluation results from results/evaluation_results.pkl")
+
             df = pd.DataFrame.from_dict(results, orient="index")
             df.index.name = "Model"
             df = df.reset_index()
+
             metric_columns = [col for col in df.columns if col != "Model"]
+
             for col in metric_columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
 
             st.subheader("Evaluation Results")
-            styled_df = df.style.highlight_max(subset=metric_columns, color="rgba(210, 235, 255, 0.45)")
+
+            styled_df = df.style.highlight_max(
+                subset=metric_columns,
+                color="rgba(210, 235, 255, 0.45)"
+            )
+
             st.dataframe(styled_df, use_container_width=True)
 
             if not df.empty:
                 st.subheader("Comparison Charts")
+
                 columns = st.columns(len(metric_columns))
+
                 for col_name, col in zip(metric_columns, columns):
-                    metric_df = df[["Model", col_name]].rename(columns={col_name: "Score"})
+                    metric_df = df[["Model", col_name]].rename(
+                        columns={col_name: "Score"}
+                    )
+
                     chart = alt.Chart(metric_df).mark_bar().encode(
                         x=alt.X("Model:N", sort=None, title="Model"),
                         y=alt.Y("Score:Q", title=col_name),
                         color=alt.value("#1f77b4"),
                         tooltip=["Model", "Score"]
                     ).properties(height=300)
+
                     col.subheader(col_name)
                     col.altair_chart(chart, use_container_width=True)
 
@@ -133,6 +165,7 @@ def main():
         if not query.strip():
             st.warning("Please enter a query before searching.")
             return
+
         if not selected_model:
             st.warning("Please select a model.")
             return
@@ -141,20 +174,64 @@ def main():
         db = load_db()
 
         with st.spinner("Running search..."):
-            model_results = run_search(services, query, [selected_model], top_k=top_k)
+            model_results = run_search(
+                services,
+                query,
+                [selected_model],
+                top_k=top_k
+            )
 
         doc_ids = model_results.get(selected_model, [])
         label = MODEL_LABELS.get(selected_model, selected_model)
+
         st.header(f"{label} Results")
+
         if not doc_ids:
             st.info("No results returned.")
-        else:
-            documents = fetch_documents_text(db, doc_ids)
-            for idx, (doc_id, document) in enumerate(zip(doc_ids, documents), start=1):
-                st.subheader(f"{idx}. Document ID: {doc_id}")
-                st.write(document.get("text", "[no text field found]"))
-                st.markdown("---")
+            return
 
+        documents = fetch_documents_text(db, doc_ids)
+
+        # عرض النتائج العادية
+        for idx, (doc_id, document) in enumerate(zip(doc_ids, documents), start=1):
+            st.subheader(f"{idx}. Document ID: {doc_id}")
+            st.write(document.get("text", "[no text field found]"))
+            st.markdown("---")
+
+        # Document Clustering
+        if enable_clustering:
+            st.header("Document Clustering")
+
+            results_for_clustering = []
+
+            for rank, (doc_id, document) in enumerate(zip(doc_ids, documents), start=1):
+                results_for_clustering.append({
+                    "doc_id": doc_id,
+                    "text": document.get("text", ""),
+                    "original_rank": rank
+                })
+
+            clustering_service = ClusteringService()
+
+            clustered_output = clustering_service.cluster_results(
+                results_for_clustering,
+                n_clusters=n_clusters
+            )
+
+            if not clustered_output["clusters"]:
+                st.info(clustered_output.get("message", "No clusters generated."))
+            else:
+                for cluster in clustered_output["clusters"]:
+                    st.subheader(
+                        f"Cluster {cluster['cluster_id']} — {cluster['label']} "
+                        f"({cluster['documents_count']} documents)"
+                    )
+
+                    for doc in cluster["documents"]:
+                        st.write(f"**Original Rank:** {doc.get('original_rank')}")
+                        st.write(f"**Document ID:** {doc.get('doc_id')}")
+                        st.write(doc.get("text", "")[:500])
+                        st.markdown("---")
 
 if __name__ == "__main__":
     main()
