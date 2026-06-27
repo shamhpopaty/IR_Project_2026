@@ -11,7 +11,7 @@ from word2vec_service import Word2VecService
 from evaluator import Evaluator
 import pandas as pd
 import altair as alt
-
+from clustering_service import ClusteringService
 MODEL_LABELS = {
     "bm25": "BM25",
     "tfidf": "TF-IDF",
